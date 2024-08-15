@@ -1,0 +1,177 @@
+substitutions:
+  name: "reverse-tft-feather"
+  friendly_name: "Adafruit ESP32-S2 Reverse TFT Feather"
+
+esphome:
+  name: "${name}"
+  friendly_name: "${friendly_name}"
+  name_add_mac_suffix: true
+
+  project:
+    name: bmatheny.reverse-tft-feather
+    version: "1.0"
+
+  # Needed for the TFT display to work. From the pinout docs:
+  # There is a power pin that must be pulled high for the display to work. This is done automatically by CircuitPython and Arduino. The pin is available in CircuitPython and in Arduino as TFT_I2C_POWER.
+  on_boot:
+    priority: 900.0
+    then:
+      - lambda: "pinMode(7, OUTPUT); digitalWrite(7, HIGH);"
+
+# There is a adafruit_feather_esp32s2_reversetft but esphome hasn't picked up
+# this version of arduino libs yet
+esp32:
+  # Note that the board is _not_ (yet) adafruit_feather_esp32s2_reversetft
+  # because ESPHome hasn't picked up that version of arduino libs yet. From what
+  # I can tell most of what we would get is the above pinMode stuff.
+  board: adafruit_feather_esp32s2_tft
+  # Will not work if type isn't arduino due to above code
+  framework:
+    type: arduino
+
+# To be able to get logs from the device via serial and api.
+logger:
+
+# API is a requirement of the dashboard import.
+api:
+
+# OTA is required for Over-the-Air updating
+ota:
+  platform: esphome
+
+# This should point to the public location of this yaml file.
+dashboard_import:
+  package_import_url: github://bmatheny/electronics/esphome/reverse-tft-feather/dev-reverse-tft-feather.yaml@main
+  import_full_config: false # or true
+
+wifi:
+  # Set up a wifi access point
+  ap:
+    password: "12345678"
+
+# In combination with the `ap` this allows the user
+# to provision Wi-Fi credentials to the device.
+captive_portal:
+
+# Sets up the improv via serial client for Wi-Fi provisioning.
+# Handy if your device has a usb port for the user to add credentials when they first get it.
+improv_serial:
+
+spi:
+  clk_pin: GPIO36
+  mosi_pin: GPIO35
+
+output:
+  - platform: gpio
+    pin: GPIO21
+    id: neopixel_power_gpio
+  - platform: ledc
+    pin: GPIO45
+    id: screen_led
+
+switch:
+  - platform: output
+    name: "Neopixel power bus"
+    output: neopixel_power_gpio
+    id: neopixel_power_switch
+    restore_mode: ALWAYS_ON
+    disabled_by_default: True
+    internal: True
+
+light:
+  - name: "Neopixel"
+    id: neopixel
+    platform: neopixelbus
+    type: GRB
+    variant: WS2812
+    pin: GPIO33
+    method:
+      type: esp32_rmt
+      channel: 0
+    num_leds: 1
+    restore_mode: RESTORE_DEFAULT_ON
+    default_transition_length: 100ms
+  - platform: status_led
+    name: "Status Light"
+    pin: GPIO13
+  - platform: monochromatic
+    output: screen_led
+    id: backlight
+    name: Backlight
+    disabled_by_default: True
+    restore_mode: ALWAYS_ON
+
+binary_sensor:
+  - platform: gpio
+    id: button0
+    pin:
+      number: GPIO0
+      inverted: true
+      mode:
+        pullup: true
+        input: true
+    disabled_by_default: True
+    internal: True
+    on_click:
+      - logger.log: "Navigate (single click)"
+      - display.page.show_next: feather_display
+    on_double_click:
+      then:
+        - logger.log: "Toggle LED (double click)"
+        - light.toggle: neopixel
+  - platform: gpio
+    id: button1
+    pin: GPIO1
+    disabled_by_default: True
+    internal: True
+    on_click:
+      - logger.log: "D1 pressed"
+  - platform: gpio
+    id: button2
+    pin: GPIO2
+    disabled_by_default: True
+    internal: True
+    on_click:
+      - logger.log: "D2 pressed"
+
+color:
+  - id: white
+    red: 100%
+    green: 100%
+    blue: 100%
+
+font:
+  - file: "gfonts://Roboto"
+    id: font1
+    size: 20
+    extras:
+      - file: "gfonts://Roboto"
+        glyphs:
+          - '<'
+          - '>'
+          - '|'
+
+display:
+  - platform: ili9xxx
+    model: ST7789V
+    cs_pin: GPIO42
+    dc_pin: GPIO40
+    reset_pin: GPIO41
+    id: feather_display
+    invert_colors: true
+    dimensions:
+      width: 135
+      height: 240
+      offset_width: 52
+      offset_height: 40
+    rotation: 90
+    pages:
+      - id: page0
+        lambda: |-
+          it.print(93, 0, id(font1), id(white), TextAlign::TOP_CENTER, "1/3 >");
+      - id: page1
+        lambda: |-
+          it.print(93, 0, id(font1), id(white), TextAlign::TOP_CENTER, "2/3 >");
+      - id: page2
+        lambda: |-
+          it.print(93, 0, id(font1), id(white), TextAlign::TOP_CENTER, "3/3 >");
